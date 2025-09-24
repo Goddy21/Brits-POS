@@ -1,0 +1,15 @@
+<resources>
+    <color name="black">#FF000000</color>
+    <color name="white">#FFFFFFFF</color>
+    <color name="transparent">#00000000</color>
+
+    <!-- Navy Blue and Red -->
+    <color name="navy_blue">#000080</color>
+    <color name="red">#FF0000</color>
+    <color name="dark_red">#8B0000</color>
+    <color name="primary_start">#1A237E</color>
+    <color name="primary_end">#3949AB</color>
+    <color name="accent_orange">#FB8C00</color>
+    <color name="error_red">#D32F2F</color>
+    <color name="grey_dark">#212121</color>
+</resources>
