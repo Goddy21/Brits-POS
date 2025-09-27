@@ -72,11 +72,9 @@ class MainActivity : AppCompatActivity() {
         binding.btnPrint.setOnClickListener {
             val receipt = buildReceiptString()
 
-            // Launch coroutine on Main thread
             lifecycleScope.launch {
                 try {
-                    // Call asynchronous P10 print function
-                    PrintHelper.printRawTextAsync(this@MainActivity, receipt)
+                    PrintHelper.printText(receipt)
                     Toast.makeText(this@MainActivity, "Printing...", Toast.LENGTH_SHORT).show()
                 } catch (e: Exception) {
                     Toast.makeText(this@MainActivity, "Print failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -94,6 +92,16 @@ class MainActivity : AppCompatActivity() {
         binding.btnCard.setOnClickListener {
             Toast.makeText(this, "Card flow (open drop-in / hosted)", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        PrintHelper.bindService(this)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        PrintHelper.unbindService(this)
     }
 
     private fun buildReceiptString(): String {

@@ -1,83 +1,73 @@
 package semeluo.history.book.britsposterminal.util
 
-import android.content.Context
-import android.os.PowerManager
+import android.content.*
+import android.os.IBinder
+import android.os.RemoteException
 import android.util.Log
-import com.xcheng.printerservice.PrinterManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.xcheng.printerservice.IPrinterService
+import com.xcheng.printerservice.IPrinterCallback
 
 object PrintHelper {
     private const val TAG = "PrintHelper"
 
-    // Flag to keep track of printer state
-    private var isPrinterOpened = false
+    private var printerService: IPrinterService? = null
+    private var isBound = false
 
-    // Safe synchronous print
-    fun printRawText(context: Context, text: String) {
-        // Acquiring a wake lock to keep the device awake during printing
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        val wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Printer::WakeLock")
-        wakeLock.acquire(10 * 60 * 1000L) // Keep the device awake for 10 minutes
+    private val connection = object : ServiceConnection {
+        override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
+            printerService = IPrinterService.Stub.asInterface(service)
+            isBound = true
+            Log.i(TAG, "PrinterService connected")
+        }
 
-        // Always get the instance on the main thread
-        val printer = PrinterManager.getInstance(context)
-
-        // Check if the printer is already open
-        if (!isPrinterOpened) {
-            Thread {
-                try {
-                    printer.printerOpen()
-                    isPrinterOpened = true  // Mark the printer as open
-                    printer.printText(context, text)
-                    printer.printerCutPaper(1)
-                    printer.printerClose()
-                    isPrinterOpened = false // Mark the printer as closed after use
-                    Log.i(TAG, "Print succeeded")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Print failed", e)
-                } finally {
-                    wakeLock.release() // Release the wake lock
-                }
-            }.start()
-        } else {
-            Log.w(TAG, "Printer is already open.")
-            wakeLock.release() // Release wake lock if printer is already open
+        override fun onServiceDisconnected(name: ComponentName?) {
+            printerService = null
+            isBound = false
+            Log.w(TAG, "PrinterService disconnected")
         }
     }
 
-    // Safe asynchronous print using coroutines
-    suspend fun printRawTextAsync(context: Context, text: String) {
-        // Acquiring a wake lock to keep the device awake during printing
-        val powerManager = context.getSystemService(Context.POWER_SERVICE) as PowerManager
-        val wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Printer::WakeLock")
-        wakeLock.acquire(10 * 60 * 1000L) // Keep the device awake for 10 minutes
+    fun bindService(context: Context) {
+        val intent = Intent("com.xcheng.printerservice.IPrinterService")
+        intent.setPackage("com.xcheng.printerservice")
+        context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+    }
 
-        // Get PrinterManager on main thread
-        val printer = withContext(Dispatchers.Main) {
-            PrinterManager.getInstance(context)
+    fun unbindService(context: Context) {
+        if (isBound) {
+            context.unbindService(connection)
+            isBound = false
         }
+    }
 
-        // Check if the printer is already open
-        if (!isPrinterOpened) {
-            withContext(Dispatchers.IO) {
-                try {
-                    printer.printerOpen()
-                    isPrinterOpened = true  // Mark the printer as open
-                    printer.printText(context, text)
-                    printer.printerCutPaper(1)
-                    printer.printerClose()
-                    isPrinterOpened = false // Mark the printer as closed after use
-                    Log.i(TAG, "Print succeeded")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Print failed", e)
-                } finally {
-                    wakeLock.release() // Release the wake lock
+    fun printText(text: String) {
+        if (!isBound || printerService == null) {
+            Log.e(TAG, "PrinterService not bound")
+            return
+        }
+        try {
+            val callback = object : IPrinterCallback.Stub() {
+                override fun onStart() {
+                    Log.i(TAG, "Printing started...")
+                }
+
+                override fun onComplete() {
+                    Log.i(TAG, "Print completed successfully")
+                }
+
+                override fun onException(code: Int, msg: String?) {
+                    Log.e(TAG, "Print failed: code=$code, msg=$msg")
+                }
+
+                override fun onLength(p0: Long, p1: Long) {
+                    Log.i(TAG, "Print progress: $p0 / $p1 bytes")
                 }
             }
-        } else {
-            Log.w(TAG, "Printer is already open.")
-            wakeLock.release() // Release wake lock if printer is already open
+
+            printerService?.printText(text + "\n", callback)
+
+        } catch (e: RemoteException) {
+            Log.e(TAG, "RemoteException while printing", e)
         }
     }
 }
